@@ -17,16 +17,18 @@ if st.button("Generate SQL"):
     if response.status_code == 200:
         response_data = response.json()
 
-        # Show generated SQL query
-        st.write("Generated SQL Query:")
-        st.code(response_data["query"], language="sql")
-
-        # Show query results
-        if "results" in response_data and response_data["results"]:
-            st.write("Query Results:")
-            st.dataframe(response_data["results"])  # Displays results in a table format
+        if "error" in response_data:
+            st.error(f"Error: {response_data['error']}")  # Show detailed error message
         else:
-            st.warning("No results found.")
+            # Show generated SQL query
+            st.write("Generated SQL Query:")
+            st.code(response_data["query"], language="sql")
 
+            # Show query results
+            if response_data.get("results") and isinstance(response_data["results"], list):
+                st.write("Query Results:")
+                st.dataframe(response_data["results"])  # Displays results in a table format
+            else:
+                st.warning("No results found.")
     else:
-        st.error("Error generating SQL.")
+        st.error(f"API Error: {response.status_code} - {response.text}")  # Show full error response
