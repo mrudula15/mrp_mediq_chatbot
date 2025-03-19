@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from langchain_groq import ChatGroq
 from langchain.prompts import PromptTemplate
+import sqlparse
 
 # Load API key from .env
 load_dotenv()
@@ -53,6 +54,34 @@ def get_schema():
     except Exception as e:
         return {"error": str(e)}
 
+
+def validate_sql_query(sql_query, schema):
+    """
+    Validate the generated SQL query to ensure it matches the database schema.
+    - Checks if query starts with SELECT
+    - Ensures only known tables & columns are used
+    """
+    parsed = sqlparse.parse(sql_query)
+    if not parsed:
+        return False, "Invalid SQL syntax."
+
+    # Ensure query starts with SELECT
+    if not sql_query.strip().lower().startswith("select"):
+        return False, "Only SELECT queries are allowed."
+
+    # Extract table names from schema
+    valid_tables = set(schema.keys())
+
+    # Extract table names from query
+    query_tables = {str(token).strip() for stmt in parsed for token in stmt.tokens if str(token).strip() in valid_tables}
+
+    # Check if all tables in query exist in schema
+    if not query_tables.issubset(valid_tables):
+        return False, f"Query references unknown tables: {query_tables - valid_tables}"
+
+    return True, "Valid SQL"
+
+
 # Initialize LangChain with Groq's Llama3-8B model
 llm = ChatGroq(
     model_name="llama3-8b-8192",
@@ -71,17 +100,14 @@ class QueryRequest(BaseModel):
 @app.post("/generate_sql")
 def generate_sql(request: QueryRequest):
     try:
-        # Fetch schema
         schema_response = get_schema()
         database_schema = schema_response.get("database_schema", {})
 
-        # Format schema for LLM
         schema_text = "\n".join(
             [f"Table: {table}, Columns: {', '.join([col['column'] for col in columns])}"
              for table, columns in database_schema.items()]
         )
 
-        # Prompt the LLM with database schema
         formatted_query = f"""
         Here is the database schema:
         {schema_text}
@@ -96,17 +122,21 @@ def generate_sql(request: QueryRequest):
 
         # Generate SQL from LLM
         sql_response = llm.invoke(formatted_query)
-
-        # Extract SQL query and clean formatting
         sql_query = sql_response.content.strip().replace("```sql", "").replace("```", "").strip()
-        if not sql_query.lower().startswith(("select", "with")):
-            return {"error": "Only SELECT queries are allowed."}
+
+        # Validate SQL before execution
+        is_valid, validation_message = validate_sql_query(sql_query, database_schema)
+        if not is_valid:
+            return {"error": f"Invalid SQL: {validation_message}"}
 
         # Execute SQL query
         conn = connect_db()
         cursor = conn.cursor()
         cursor.execute(sql_query)
         result = cursor.fetchall()
+
+        if not result:
+            return {"query": sql_query, "results": "No data found."}
 
         # Format results as JSON
         columns = [column[0] for column in cursor.description]
@@ -116,6 +146,7 @@ def generate_sql(request: QueryRequest):
 
     except Exception as e:
         return {"error": str(e)}
+
 
 # Run FastAPI server
 if __name__ == '__main__':
