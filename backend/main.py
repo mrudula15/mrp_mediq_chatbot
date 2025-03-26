@@ -1,30 +1,27 @@
 import os
 from dotenv import load_dotenv
-import uvicorn
-import pyodbc
-from fastapi import FastAPI
-from pydantic import BaseModel
-from langchain_groq import ChatGroq
-from langchain.prompts import PromptTemplate
-import sqlparse
+from langchain_core.prompts import PromptTemplate
 
 # Load API key from .env
 load_dotenv()
+import uvicorn
+from fastapi import FastAPI
+from pydantic import BaseModel
+from langchain_groq import ChatGroq
+from backend.answer_generator import get_natural_language_response
+from backend.db_utils import connect_db, get_schema, validate_sql_query
+from backend.sql_chain import get_sql_chain
+
+# In-memory chat history (temporary)
+chat_history = []
+
+
 groq_api_key = os.getenv("GROQ_API_KEY")
 if not groq_api_key:
     raise ValueError("GROQ_API_KEY is missing. Please check your .env file.")
 
 # Initialize FastAPI
 app = FastAPI()
-
-# SQL Server Connection
-def connect_db():
-    return pyodbc.connect(
-        "DRIVER={ODBC Driver 17 for SQL Server};"
-        "SERVER=Chaitanya;"  # Replace with your SQL Server name
-        "DATABASE=synthea_db;"   # Replace with your database name
-        "Trusted_Connection=yes;"  # Windows authentication
-    )
 
 # Test database connection
 @app.get("/test_db")
@@ -34,53 +31,6 @@ def test_db():
         return {"status": "Connected to SQL Server!"}
     except Exception as e:
         return {"error": str(e)}
-
-# Fetch database schema (tables & columns)
-@app.get("/get_schema")
-def get_schema():
-    try:
-        conn = connect_db()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE'")
-        tables = [row[0] for row in cursor.fetchall()]
-
-        schema = {}
-        for table in tables:
-            cursor.execute(f"SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table}'")
-            schema[table] = [{"column": row[0], "type": row[1]} for row in cursor.fetchall()]
-
-        return {"database_schema": schema}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def validate_sql_query(sql_query, schema):
-    """
-    Validate the generated SQL query to ensure it matches the database schema.
-    - Checks if query starts with SELECT
-    - Ensures only known tables & columns are used
-    """
-    parsed = sqlparse.parse(sql_query)
-    if not parsed:
-        return False, "Invalid SQL syntax."
-
-    # Ensure query starts with SELECT
-    if not sql_query.strip().lower().startswith("select"):
-        return False, "Only SELECT queries are allowed."
-
-    # Extract table names from schema
-    valid_tables = set(schema.keys())
-
-    # Extract table names from query
-    query_tables = {str(token).strip() for stmt in parsed for token in stmt.tokens if str(token).strip() in valid_tables}
-
-    # Check if all tables in query exist in schema
-    if not query_tables.issubset(valid_tables):
-        return False, f"Query references unknown tables: {query_tables - valid_tables}"
-
-    return True, "Valid SQL"
-
 
 # Initialize LangChain with Groq's Llama3-8B model
 llm = ChatGroq(
@@ -108,21 +58,17 @@ def generate_sql(request: QueryRequest):
              for table, columns in database_schema.items()]
         )
 
-        formatted_query = f"""
-        Here is the database schema:
-        {schema_text}
+        # Generate SQL using LangChain chain
+        chain = get_sql_chain(lambda: schema_text)
 
-        Convert this natural language question into a **valid SQL Server SELECT query** using the given schema.
-        Ensure the SQL follows SQL Server syntax (use `TOP` instead of `LIMIT`).
-        Return **only the SQL query**, without explanations or markdown formatting.
+        # Prepare chat history text
+        chat_text = "\n".join(chat_history[-5:])  # Keep last 5 exchanges
 
-        Question: {request.query}
-        SQL:
-        """
-
-        # Generate SQL from LLM
-        sql_response = llm.invoke(formatted_query)
-        sql_query = sql_response.content.strip().replace("```sql", "").replace("```", "").strip()
+        # Run chain with history
+        sql_query = chain.invoke({
+            "question": request.query,
+            "chat_history": chat_text
+        })
 
         # Validate SQL before execution
         is_valid, validation_message = validate_sql_query(sql_query, database_schema)
@@ -142,7 +88,20 @@ def generate_sql(request: QueryRequest):
         columns = [column[0] for column in cursor.description]
         data = [dict(zip(columns, row)) for row in result]
 
-        return {"query": sql_query, "results": data}
+        # Get natural language response
+        nl_response = get_natural_language_response(llm, schema_text, request.query, sql_query, data)
+
+        # Save to chat history
+        chat_history.append(f"User: {request.query}")
+        chat_history.append(f"Assistant: {nl_response}")
+
+        # Return final response
+        return {
+            "query": sql_query,
+            "results": data,
+            "answer": nl_response
+        }
+
 
     except Exception as e:
         return {"error": str(e)}

@@ -169,3 +169,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+.idea/
+
+backend/data/raw/csv/claims.csv
+backend/data/raw/csv/observations.csv
+backend/data/raw/csv/claims_transactions.csv
+/backend/data/raw/csv/
