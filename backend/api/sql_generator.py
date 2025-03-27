@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from langchain_groq import ChatGroq
 from backend.answer_generator import get_natural_language_response
 from backend.db_utils import connect_db, get_schema, validate_sql_query
-from backend.sql_chain import get_sql_chain
+from backend.sql_chain import get_sql_chain, llm
 
 # In-memory chat history (temporary)
 chat_history = []
@@ -87,4 +87,5 @@ def generate_sql(request: QueryRequest):
 # Run FastAPI server
 
 if __name__ == '__main__':
-    generate_sql(QueryRequest(query="hey"))
+    response= generate_sql(QueryRequest(query="average age of patients in each location"))
+    print(response)

@@ -30,5 +30,8 @@ if st.button("Generate SQL"):
                 st.dataframe(response_data["results"])  # Displays results in a table format
             else:
                 st.warning("No results found.")
-    else:
-        st.error(f"API Error: {response.status_code} - {response.text}")  # Show full error response
+
+            # Show natural language answer
+            if "answer" in response_data:
+                st.write("Answer in Natural Language:")
+                st.success(response_data["answer"])
