@@ -17,13 +17,13 @@ llm = ChatGroq(
 
 # Create prompt template
 sql_prompt = ChatPromptTemplate.from_template("""
-You are a helpful assistant that converts natural language questions into SQL Server queries.
+You are a helpful assistant like data analyst that converts natural language questions into SQL Server queries.
 <SCHEMA>{schema}</SCHEMA>
 
 Conversation History: {chat_history}
 
 Question: {question}
-Write a valid SQL Server SELECT query (use TOP instead of LIMIT). Do not return any explanation or markdown.
+Write a valid SQL Server SELECT query (use TOP instead of LIMIT). Do not return any explanation or markdown or backticks.
 
 SQL Query:
 """)

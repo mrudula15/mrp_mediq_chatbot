@@ -1,52 +1,57 @@
-import os
-from dotenv import load_dotenv
-from langchain_core.prompts import PromptTemplate
-
-# Load API key from .env
-load_dotenv()
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
+from dotenv import load_dotenv
 from langchain_groq import ChatGroq
-from backend.answer_generator import get_natural_language_response
+from pathlib import Path
+import os
+
 from backend.db_utils import connect_db, get_schema, validate_sql_query
 from backend.sql_chain import get_sql_chain
+from backend.answer_generator import get_natural_language_response
 
-# In-memory chat history (temporary)
+load_dotenv()
+
+app = FastAPI()
 chat_history = []
 
-
+# Load API Key
 groq_api_key = os.getenv("GROQ_API_KEY")
 if not groq_api_key:
     raise ValueError("GROQ_API_KEY is missing. Please check your .env file.")
 
-# Initialize FastAPI
-app = FastAPI()
-
-# Test database connection
-@app.get("/test_db")
-def test_db():
-    try:
-        connect_db()
-        return {"status": "Connected to SQL Server!"}
-    except Exception as e:
-        return {"error": str(e)}
-
-# Initialize LangChain with Groq's Llama3-8B model
-llm = ChatGroq(
-    model_name="llama3-8b-8192",
-    api_key=groq_api_key
-)
-
-# SQL Prompt Template
-sql_prompt = PromptTemplate.from_template(
-    "Convert this natural language query into a SQL statement: {query}"
-)
+llm = ChatGroq(model_name="llama3-8b-8192", api_key=groq_api_key)
 
 class QueryRequest(BaseModel):
     query: str
 
-# Generate and execute SQL query
+ # Predefined question-to-SQL mapping
+predefined_sql_map = {
+    "What are the demographic proportions (race and gender) of patients visiting the hospital?": "Q1",
+    "What are the top 5 busiest hospital locations?": "Q2",
+    "How does the average age of a patient visiting the hospital vary according to their race?": "Q3",
+    "How does the average age of a patient visiting the hospital vary according to their gender?": "Q4",
+    "How do the average healthcare expenses and coverage of patients belonging to different races compare with their average incomes?": "Q5",
+    "Show me the list of counties recorded with more obese cases.": "Q6",
+    "Show me the list of counties with more patients suffering from stress.": "Q7",
+    "Show me the list of counties recorded with more cases of sepsis.": "Q8",
+    "List the top 10 locations of patients diagnosed with chronic conditions. (use condition_duration_days)": "Q9",
+    "Give me the list of patient encounter types and their respective percentages.": "Q10",
+    "Which zip codes have the highest emergency visit rates?": "Q11",
+    "What is the average duration for each encounter class?": "Q12",
+    "Which providers have the longest average encounter durations?": "Q13",
+    "Which department has the longest average encounter duration?": "Q14",
+    "What is the average encounter duration and out-of-pocket cost for private, government, and uninsured patients?": "Q15",
+    "What is the average out-of-pocket cost and insurance coverage ratio across different age groups?": "Q16",
+    "Which encounter classes brought in higher average claim profit margins?": "Q17",
+    "Which regions are bringing the higher claim profit margins?": "Q18",
+    "Which regions are bringing the lower claim profit margins?": "Q19",
+    "What is the average cost coverage ratio for each insurer, grouped by private and government ownership?": "Q20",
+    "Which regions have the highest number of uninsured patients based on payer data?": "Q21",
+    "Which departments have the highest average claim profit margin?": "Q22",
+    "Which departments see the most uninsured patients?": "Q23"
+}
+
 @app.post("/generate_sql")
 def generate_sql(request: QueryRequest):
     try:
@@ -58,54 +63,52 @@ def generate_sql(request: QueryRequest):
              for table, columns in database_schema.items()]
         )
 
-        # Generate SQL using LangChain chain
-        chain = get_sql_chain(lambda: schema_text)
+        # Check predefined query map
+        if request.query in predefined_sql_map:
+            qid = predefined_sql_map[request.query]
+            path = Path(fr"C:\Users\palad\PycharmProjects\health-equity-LLM-chatbot-2\backend\data\predefined_sql\{qid}.sql")
+            with open(path, "r", encoding="utf-8") as f:
+                sql_query = f.read().strip()
+        else:
+            # Fallback to LLM-based generation
+            chain = get_sql_chain(lambda: schema_text)
+            chat_text = "\n".join(chat_history[-5:])
+            sql_query = chain.invoke({"question": request.query, "chat_history": chat_text})
 
-        # Prepare chat history text
-        chat_text = "\n".join(chat_history[-5:])  # Keep last 5 exchanges
-
-        # Run chain with history
-        sql_query = chain.invoke({
-            "question": request.query,
-            "chat_history": chat_text
-        })
-
-        # Validate SQL before execution
+        # Validate SQL
         is_valid, validation_message = validate_sql_query(sql_query, database_schema)
         if not is_valid:
             return {"error": f"Invalid SQL: {validation_message}"}
 
-        # Execute SQL query
+        # Execute SQL
         conn = connect_db()
         cursor = conn.cursor()
-        cursor.execute(sql_query)
-        result = cursor.fetchall()
+        try:
+            cursor.execute(sql_query)
+            result = cursor.fetchall()
+        except Exception as sql_err:
+            return {"error": f"SQL Execution Error: {sql_err}"}
 
         if not result:
             return {"query": sql_query, "results": "No data found."}
 
-        # Format results as JSON
         columns = [column[0] for column in cursor.description]
         data = [dict(zip(columns, row)) for row in result]
 
-        # Get natural language response
+        # Natural language explanation
         nl_response = get_natural_language_response(llm, schema_text, request.query, sql_query, data)
 
-        # Save to chat history
         chat_history.append(f"User: {request.query}")
         chat_history.append(f"Assistant: {nl_response}")
 
-        # Return final response
         return {
             "query": sql_query,
             "results": data,
             "answer": nl_response
         }
 
-
     except Exception as e:
-        return {"error": str(e)}
-
+        return {"error": f"Unhandled Server Error: {str(e)}"}
 
 # Run FastAPI server
 if __name__ == '__main__':
