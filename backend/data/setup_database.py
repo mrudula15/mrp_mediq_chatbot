@@ -1,6 +1,6 @@
 import pyodbc
 
-server = "Chaitanya"
+server = "LAPTOP-0OSF00UQ\\SQLEXPRESS01"
 database = "synthea_db_cleaned"
 driver = "{ODBC Driver 17 for SQL Server}"
 

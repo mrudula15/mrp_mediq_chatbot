@@ -6,7 +6,7 @@ import sqlparse
 def connect_db():
     return pyodbc.connect(
         "DRIVER={ODBC Driver 17 for SQL Server};"
-        "SERVER=Chaitanya;"  # Replace with your SQL Server name
+        "SERVER=LAPTOP-0OSF00UQ\\SQLEXPRESS01;"  # Replace with your SQL Server name
         "DATABASE=synthea_db_cleaned;"   # Replace with your database name
         "Trusted_Connection=yes;"  # Windows authentication
     )

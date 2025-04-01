@@ -9,11 +9,22 @@ import os
 from backend.db_utils import connect_db, get_schema, validate_sql_query
 from backend.sql_chain import get_sql_chain
 from backend.answer_generator import get_natural_language_response
+from backend.predicton.followup_predictor import suggest_followups
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from fastapi import Request
 
 load_dotenv()
 
 app = FastAPI()
 chat_history = []
+
+frontend_path = Path(__file__).resolve().parent.parent / "frontend"
+app.mount("/static", StaticFiles(directory=frontend_path / "static"), name="static")
+templates = Jinja2Templates(directory=str(frontend_path / "templates"))
+
 
 # Load API Key
 groq_api_key = os.getenv("GROQ_API_KEY")
@@ -66,7 +77,7 @@ def generate_sql(request: QueryRequest):
         # Check predefined query map
         if request.query in predefined_sql_map:
             qid = predefined_sql_map[request.query]
-            path = Path(fr"C:\Users\palad\PycharmProjects\health-equity-LLM-chatbot-2\backend\data\predefined_sql\{qid}.sql")
+            path = Path(fr"C:\Users\mrudu\PycharmProjects\health-equity-LLM-chatbot\backend\data\predefined_sql\{qid}.sql")
             with open(path, "r", encoding="utf-8") as f:
                 sql_query = f.read().strip()
         else:
@@ -98,17 +109,25 @@ def generate_sql(request: QueryRequest):
         # Natural language explanation
         nl_response = get_natural_language_response(llm, schema_text, request.query, sql_query, data)
 
+        # After getting the natural language answer
+        followups = suggest_followups(request.query)
+
         chat_history.append(f"User: {request.query}")
         chat_history.append(f"Assistant: {nl_response}")
 
         return {
             "query": sql_query,
             "results": data,
-            "answer": nl_response
+            "answer": nl_response,
+            "followups": followups
         }
 
     except Exception as e:
         return {"error": f"Unhandled Server Error: {str(e)}"}
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 # Run FastAPI server
 if __name__ == '__main__':

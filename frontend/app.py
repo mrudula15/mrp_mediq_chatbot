@@ -1,37 +1,61 @@
 import streamlit as st
 import requests
 
-# Streamlit UI
+# Page setup
 st.set_page_config(page_title="MediQ SQL Chatbot", layout="wide")
-st.title("LLM SQL Query Chatbot")
+st.title("MediQ Chatbot")
 
-# User input
-user_query = st.text_input("Ask me anything...")
+# Initialize session state
+if "user_query" not in st.session_state:
+    st.session_state.user_query = ""
+if "auto_submit" not in st.session_state:
+    st.session_state.auto_submit = False
 
-if st.button("Generate SQL"):
-    response = requests.post(
-        "http://127.0.0.1:8000/generate_sql",  # Calls FastAPI
-        json={"query": user_query}
-    )
+# 🔁 When a follow-up question is clicked, this is triggered
+def handle_followup_click(fq):
+    st.session_state.user_query = fq
+    st.session_state.auto_submit = True
 
-    if response.status_code == 200:
-        response_data = response.json()
 
-        if "error" in response_data:
-            st.error(f"Error: {response_data['error']}")  # Show detailed error message
-        else:
-            # Show generated SQL query
-            st.write("Generated SQL Query:")
-            st.code(response_data["query"], language="sql")
+# Text input (populated from session)
+user_query = st.text_input("Ask me anything...", value=st.session_state.user_query)
 
-            # Show query results
-            if response_data.get("results") and isinstance(response_data["results"], list):
-                st.write("Query Results:")
-                st.dataframe(response_data["results"])  # Displays results in a table format
+# Manual or auto submission logic
+submit_clicked = st.button("Generate SQL")
+
+# Combine both auto and manual trigger
+if submit_clicked or st.session_state.auto_submit:
+    # Reset auto_submit so it doesn't run again on reload
+    st.session_state.auto_submit = False
+
+    if user_query.strip() != "":
+        response = requests.post(
+            "http://127.0.0.1:8000/generate_sql",
+            json={"query": user_query}
+        )
+
+        if response.status_code == 200:
+            response_data = response.json()
+
+            if "error" in response_data:
+                st.error(f"Error: {response_data['error']}")
             else:
-                st.warning("No results found.")
+                st.subheader("Generated SQL Query:")
+                st.code(response_data["query"], language="sql")
 
-            # Show natural language answer
-            if "answer" in response_data:
-                st.write("Answer in Natural Language:")
+                if response_data.get("results") and isinstance(response_data["results"], list):
+                    st.subheader("Query Results:")
+                    st.dataframe(response_data["results"])
+                else:
+                    st.warning("No results found.")
+
+                st.subheader("Answer in Natural Language:")
                 st.success(response_data["answer"])
+
+                # 🎯 Show follow-up suggestions as buttons
+                if "followups" in response_data:
+                    st.subheader("Suggested Follow-up Questions:")
+                    for fq in response_data["followups"]:
+                        st.button(f"👉 {fq}", on_click=handle_followup_click, args=(fq,))
+
+

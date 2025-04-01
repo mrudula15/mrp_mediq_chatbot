@@ -3,13 +3,13 @@ import os
 import pandas as pd
 
 # Define your database connection parameters
-server = 'Chaitanya'  # Change if your SQL Server is on another machine
+server = 'LAPTOP-0OSF00UQ\\SQLEXPRESS01'  # Change if your SQL Server is on another machine
 database = 'synthea_db'
 
 # Create a connection using Windows Authentication (no password required)
 try:
     conn = pyodbc.connect(
-        f'DRIVER={{SQL Server}};'
+        f'DRIVER={{ODBC Driver 17 for SQL Server}};'
         f'SERVER={server};'
         f'DATABASE={database};'
         'Trusted_Connection=yes;'
@@ -23,7 +23,7 @@ import os
 import pandas as pd
 
 # Define the folder path where CSV files are stored
-csv_folder_path = r"C:\Users\palad\synthea\output\csv"
+csv_folder_path = r"C:\Users\mrudu\PycharmProjects\health-equity-LLM-chatbot\backend\data\processed"
 
 # Get a list of all CSV files in the folder
 csv_files = [f for f in os.listdir(csv_folder_path) if f.endswith('.csv')]

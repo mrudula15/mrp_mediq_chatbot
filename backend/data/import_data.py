@@ -2,7 +2,7 @@ import pyodbc
 import pandas as pd
 import os
 
-server = "Chaitanya"
+server = "LAPTOP-0OSF00UQ\\SQLEXPRESS01"
 database = "synthea_db_cleaned"
 driver = "{ODBC Driver 17 for SQL Server}"
 
@@ -15,7 +15,7 @@ try:
     print(f"Connected to '{database}' successfully")
 
     # Path to cleaned CSV files
-    processed_data_path = r"C:\Users\palad\PycharmProjects\health-equity-LLM-chatbot\backend\data\processed"
+    processed_data_path = r"C:\Users\mrudu\PycharmProjects\health-equity-LLM-chatbot\backend\data\processed"
 
     # Table-to-file mapping
     # Corrected insertion order to match foreign key dependencies
