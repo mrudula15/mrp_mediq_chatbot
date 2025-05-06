@@ -7,7 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --primary-color: #0A2681;
+            --primary-color: #000000;
             --secondary-color: #4285F4;
             --accent-color: #34A853;
             --text-light: #FFFFFF;
@@ -36,7 +36,7 @@
         /* Sidebar Styles */
         .sidebar {
             width: 275px;
-            background-color: #071C5D;
+            background-color: #000000;
             border-right: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
             flex-direction: column;
@@ -192,7 +192,7 @@
 
         .message.user-message {
             align-self: flex-end;
-            background-color: #1a56db;
+            background-color: rgba(255, 255, 255, 0.1);
             color: white;
         }
 
@@ -314,7 +314,7 @@
             position: absolute;
             right: 5px;
             top: 5px;
-            background-color: #4285F4;
+            background-color: #000000;
             border: none;
             color: white;
             width: 40px;
@@ -770,8 +770,8 @@
 
               keys.forEach(key => {
                 const canvas = document.createElement('canvas');
-                canvas.style.maxWidth = '600px';
-                canvas.style.marginTop = '20px';
+                canvas.style.maxWidth = '800px';
+                canvas.style.marginTop = '50px';
                 chatMessages.appendChild(canvas);
 
                 new Chart(canvas, {
@@ -781,19 +781,72 @@
                     datasets: [{
                       label: key,
                       data: data.results.map(row => row[key]),
-                      backgroundColor: 'rgba(235,238,238,0.6)',
+                      backgroundColor: '#ffffff',
                     }]
                   },
                   options: {
-                    responsive: true,
-                    plugins: {
-                      legend: { display: true },
-                      title: {
-                        display: true,
-                        text: `${key} by ${labels[0]}`
+                      responsive: true,
+                      plugins: {
+                        legend: {
+                          labels: {
+                            color: '#ffffff',
+                            font: {
+                              size: 16
+                            }
+                          }
+                        },
+                        title: {
+                          display: true,
+                          text: `${key} by ${labels[0]}`,
+                          color: '#ffffff',
+                          font: {
+                            size: 18
+                          }
+                        },
+                        tooltip: {
+                          bodyFont: {
+                            size: 14
+                          },
+                          titleFont: {
+                            size: 16
+                          }
+                        }
+                      },
+                      scales: {
+                        x: {
+                          ticks: {
+                            color: '#ffffff',
+                            font: {
+                              size: 14
+                            }
+                          },
+                          title: {
+                            display: true,
+                            text: labels[0],
+                            color: '#ffffff',
+                            font: {
+                              size: 16
+                            }
+                          }
+                        },
+                        y: {
+                          ticks: {
+                            color: '#ffffff',
+                            font: {
+                              size: 14
+                            }
+                          },
+                          title: {
+                            display: true,
+                            text: key,
+                            color: '#ffffff',
+                            font: {
+                              size: 16
+                            }
+                          }
+                        }
                       }
                     }
-                  }
                 });
               });
             }
